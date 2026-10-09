@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Static translator app copied from the zh-translator repo.
+    "public/translator/**",
   ]),
 ]);
 
