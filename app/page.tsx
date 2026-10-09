@@ -74,6 +74,27 @@ export default function Home() {
                 <li className="rounded-full border border-zinc-800 px-3 py-1">READ-ALOUD</li>
               </ul>
             </a>
+            <a
+              href="/birds"
+              className="group mt-4 block rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition-colors hover:border-zinc-600 hover:bg-zinc-900"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-lg">Birds</p>
+                  <p className="text-zinc-400 mt-1">Latest videos from my YouTube channel.</p>
+                </div>
+                <span
+                  aria-hidden="true"
+                  className="text-zinc-400 text-xl transition-colors group-hover:text-white"
+                >
+                  →
+                </span>
+              </div>
+              <ul className="mt-5 flex flex-wrap gap-2 text-xs tracking-widest text-zinc-400">
+                <li className="rounded-full border border-zinc-800 px-3 py-1">VIDEO</li>
+                <li className="rounded-full border border-zinc-800 px-3 py-1">YOUTUBE</li>
+              </ul>
+            </a>
           </div>
 
           <div className="pt-8 space-y-4">
