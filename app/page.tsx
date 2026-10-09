@@ -2,6 +2,13 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
       <div className="max-w-2xl mx-auto px-6 py-24">
+        <header className="mb-12 text-sm tracking-widest">
+          <p>
+            <span className="text-white uppercase">DOCTOR MASTER</span>
+            <span className="text-zinc-400"> — whovian coder</span>
+          </p>
+        </header>
+
         <div className="mb-16 flex flex-col-reverse sm:flex-row sm:items-start sm:justify-between gap-8">
           <div>
             <h1 className="text-5xl font-light mb-3">Hi, I&apos;m learning to build.</h1>
@@ -12,11 +19,11 @@ export default function Home() {
           <div
             role="img"
             aria-label="Doctor Master UK logo"
-            className="w-40 h-40 rounded-full bg-zinc-900 border border-zinc-800 text-white grid place-items-center shrink-0 sm:ml-6"
+            className="w-24 h-24 sm:w-28 sm:h-28 text-white shrink-0 sm:ml-6"
           >
             <svg
               viewBox="0 0 64 64"
-              className="w-20 h-20"
+              className="block w-full h-full"
               fill="none"
               stroke="currentColor"
               strokeLinecap="round"

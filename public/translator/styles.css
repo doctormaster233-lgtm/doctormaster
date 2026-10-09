@@ -92,20 +92,16 @@ h1 {
   line-height: 1.4;
 }
 
-/* round badge in the spot the site uses for its round portrait */
+/* the tesseract logo on its own, in the spot the site uses for its logo */
 .seal {
-  width: 112px;
-  height: 112px;
+  width: 96px;
+  height: 96px;
   flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--card);
-  border: 1px solid var(--line);
+  display: block;
   color: var(--ink);
 }
 
-.seal svg { width: 50%; height: 50%; display: block; }
+.seal svg { width: 100%; height: 100%; display: block; }
 
 .hint, .prov, .status, footer p {
   margin: 4px 0 0;
@@ -380,7 +376,7 @@ footer a:hover { color: var(--ink); }
     gap: 24px;
     margin-top: 40px;
   }
-  .seal { width: 80px; height: 80px; }
+  .seal { width: 72px; height: 72px; }
   h1 { font-size: 2.25rem; line-height: 1.1; }
   .lede { font-size: 1.125rem; }
   .langbar { margin-top: 40px; gap: 8px; }
