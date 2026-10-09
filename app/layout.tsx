@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Doctor Master UK",
   description:
-    "Sharon Epic Armando is learning to build for the web — notes, projects, and a Chinese ↔ English translator.",
+    "Learning to build for the web — notes, projects, and a Chinese ↔ English translator.",
 };
 
 export default function RootLayout({
