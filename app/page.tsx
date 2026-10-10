@@ -107,6 +107,17 @@ export default function Home() {
                 Email me
               </a>
             </p>
+            <p className="text-zinc-500 text-xs">
+              <a href="https://www.anachronicarmy.com" className="underline underline-offset-4 hover:text-white">
+                anachronicarmy.com
+              </a>
+              {" · "}
+              <a href="https://www.quantumspatial.lol" className="underline underline-offset-4 hover:text-white">
+                quantumspatial.lol
+              </a>
+              {" · "}
+              Bootstrap Arts 2026
+            </p>
           </div>
         </div>
       </div>
