@@ -11,9 +11,9 @@ export default function Home() {
 
         <div className="mb-16 flex flex-col-reverse sm:flex-row sm:items-start sm:justify-between gap-8">
           <div>
-            <h1 className="text-5xl font-light mb-3">Hi, I&apos;m learning to build.</h1>
+            <h1 className="text-5xl font-light mb-3">Hi, I build things.</h1>
             <p className="text-zinc-400 text-xl">
-              I&apos;m teaching myself how to code and building things from scratch. This site is part of that journey.
+              Web apps, art and physics experiments, made from scratch. Still learning, always shipping.
             </p>
           </div>
           <div
@@ -44,7 +44,7 @@ export default function Home() {
           </div>
 
           <div>
-            <h2 className="text-zinc-400 text-sm tracking-widest mb-4">CURRENTLY LEARNING</h2>
+            <h2 className="text-zinc-400 text-sm tracking-widest mb-4">BUILT WITH</h2>
             <p className="text-lg">Next.js, TypeScript, and Tailwind</p>
           </div>
 
@@ -99,7 +99,7 @@ export default function Home() {
 
           <div className="pt-8 space-y-4">
             <p className="text-zinc-400">
-              Looking for mentorship, feedback, or small freelance opportunities while I learn.
+              Open to freelance work, collaborations and feedback.
             </p>
             <p className="text-zinc-400">
               I am a web developer, artist and artificial intelligence enthusiast. I presently live in Charlottetown, Prince Edward Island, Canada. I am willing to relocate.
