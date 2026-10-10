@@ -98,6 +98,10 @@ export default function Home() {
           </div>
 
           <div className="pt-8 space-y-4">
+            <p className="text-zinc-500 text-xs">
+              Sharon Epic Armando formerly Sharon Elizabeth Hodgson aka Doctor Master in Charlottetown, Prince Edward Island, Canada.{" "}
+              <a href="tel:+19022678081" className="hover:text-white">902-267-8081</a>
+            </p>
             <p className="text-zinc-400">
               <a href="mailto:doctormaster233@gmail.com" className="underline underline-offset-4 hover:text-white">
                 Email me
