@@ -99,12 +99,6 @@ export default function Home() {
 
           <div className="pt-8 space-y-4">
             <p className="text-zinc-400">
-              Open to freelance work, collaborations and feedback.
-            </p>
-            <p className="text-zinc-400">
-              I am a web developer, artist and artificial intelligence enthusiast. I presently live in Charlottetown, Prince Edward Island, Canada. I am willing to relocate.
-            </p>
-            <p className="text-zinc-400">
               <a href="mailto:doctormaster233@gmail.com" className="underline underline-offset-4 hover:text-white">
                 Email me
               </a>
