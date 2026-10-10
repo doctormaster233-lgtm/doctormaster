@@ -11,10 +11,7 @@ export default function Home() {
 
         <div className="mb-16 flex flex-col-reverse sm:flex-row sm:items-start sm:justify-between gap-8">
           <div>
-            <h1 className="text-5xl font-light mb-3">Hi, I build things.</h1>
-            <p className="text-zinc-400 text-xl">
-              Web apps, art and physics experiments, made from scratch. Still learning, always shipping.
-            </p>
+            <h1 className="text-5xl font-light">Hi, I build things.</h1>
           </div>
           <div
             role="img"
