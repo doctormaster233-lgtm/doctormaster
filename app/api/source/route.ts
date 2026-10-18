@@ -19,7 +19,7 @@ function isPrivate(ip: string): boolean {
       (a === 172 && b >= 16 && b <= 31) ||
       (a === 192 && b === 168) ||
       (a === 192 && b === 0) ||
-      (a === 198 && (b === 18 || b === 19) && process.env.CODE_ALLOW_198_18 !== "1") // local sandbox testing only
+      (a === 198 && (b === 18 || b === 19))
     );
   }
   const v = ip.toLowerCase();
