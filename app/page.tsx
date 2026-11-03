@@ -161,6 +161,28 @@ export default function Home() {
             </a>
           </div>
 
+          <div id="contact">
+            <h2 className="text-zinc-400 text-sm tracking-widest mb-4">WORK WITH ME</h2>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+              <p className="text-lg">Have a project or role in mind?</p>
+              <p className="text-zinc-400 mt-1">Get in touch about work opportunities.</p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <a
+                  href="mailto:sharon.epic@bootstraparts.com?subject=Work%20opportunity"
+                  className="rounded-full bg-white px-5 py-2 text-sm text-zinc-950 transition-colors hover:bg-zinc-200"
+                >
+                  Email sharon.epic@bootstraparts.com
+                </a>
+                <a
+                  href="tel:+19022678081"
+                  className="rounded-full border border-zinc-700 px-5 py-2 text-sm text-white transition-colors hover:border-zinc-500"
+                >
+                  Call 902-267-8081
+                </a>
+              </div>
+            </div>
+          </div>
+
           <div className="pt-8 space-y-4">
             <p className="text-zinc-500 text-xs">
               Sharon Epic Armando formerly Sharon Elizabeth Hodgson aka Doctor Master in Charlottetown, Prince Edward Island, Canada.{" "}
