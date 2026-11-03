@@ -38,18 +38,18 @@ export default function Home() {
         </div>
 
         <div className="space-y-12">
-          <div>
-            <h2 className="text-zinc-400 text-sm tracking-widest mb-4">CURRENTLY BUILDING</h2>
+          <details className="collapsible-section">
+            <summary><h2 className="text-zinc-400 text-sm tracking-widest mb-4">CURRENTLY BUILDING</h2></summary>
             <p className="text-lg">A clean, minimalist storytelling site</p>
-          </div>
+          </details>
 
-          <div>
-            <h2 className="text-zinc-400 text-sm tracking-widest mb-4">BUILT WITH</h2>
+          <details className="collapsible-section">
+            <summary><h2 className="text-zinc-400 text-sm tracking-widest mb-4">BUILT WITH</h2></summary>
             <p className="text-lg">Next.js, TypeScript, and Tailwind</p>
-          </div>
+          </details>
 
-          <div>
-            <h2 className="text-zinc-400 text-sm tracking-widest mb-4">THINGS I&apos;VE BUILT</h2>
+          <details className="collapsible-section">
+            <summary><h2 className="text-zinc-400 text-sm tracking-widest mb-4">THINGS I&apos;VE BUILT</h2></summary>
             <a
               href="/translator"
               className="group block rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition-colors hover:border-zinc-600 hover:bg-zinc-900"
@@ -159,7 +159,7 @@ export default function Home() {
                 <li className="rounded-full border border-zinc-800 px-3 py-1">COPY</li>
               </ul>
             </a>
-          </div>
+          </details>
 
           <div id="contact">
             <h2 className="text-zinc-400 text-sm tracking-widest mb-4">WORK WITH ME</h2>
