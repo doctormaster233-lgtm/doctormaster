@@ -192,6 +192,8 @@ export default function Home() {
               <a href="mailto:doctormaster233@gmail.com" className="underline underline-offset-4 hover:text-white">
                 Email me
               </a>
+              {" · "}
+              <a href="tel:+19022678081" className="underline underline-offset-4 hover:text-white">902-267-8081</a>
             </p>
             <p className="text-zinc-500 text-xs">
               <a href="https://www.anachronicarmy.com" className="underline underline-offset-4 hover:text-white">
