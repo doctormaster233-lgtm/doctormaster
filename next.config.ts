@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
       { source: "/translator", destination: "/translator/index.html" },
       // Interactive 3D yoga pose viewer, a static page in public/yoga/.
       { source: "/yoga", destination: "/yoga/index.html" },
+      // Animated 3D taekwondo techniques, a static page in public/taekwondo/.
+      { source: "/taekwondo", destination: "/taekwondo/index.html" },
     ];
   },
 };
