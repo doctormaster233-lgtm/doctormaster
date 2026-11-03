@@ -44,6 +44,11 @@
   li { margin-bottom: 0.25rem; }
   .profile { background: var(--light); padding: 1rem 1.2rem; border-radius: 6px; margin-bottom: 0.5rem; }
   .skills li, .languages { margin-bottom: 0.3rem; }
+  .contact a { color: inherit; text-decoration: none; }
+  .contact a:hover { color: var(--accent); }
+  .work-btn { display: inline-block; margin: 0.5rem 0 0.4rem; padding: 0.35rem 0.9rem; font-size: 0.9rem; color: var(--bg); background: var(--accent); border-radius: 4px; text-decoration: none; }
+  .work-btn:hover { opacity: 0.9; }
+  @media print { .work-btn { display: none; } }
   footer { margin-top: 2.5rem; text-align: center; font-size: 0.85rem; color: var(--muted); }
   @media (max-width: 600px) {
     body { padding: 1.25rem 1rem 2rem; }
@@ -55,7 +60,8 @@
   <header>
     <h1>Sharon Epic Armando</h1>
     <div class="subtitle">AI Creative Technologist</div>
-    <div class="contact">Charlottetown, PE · 902-267-8081 · sharon.epic@bootstraparts.com</div>
+    <div class="contact">Charlottetown, PE · <a href="tel:+19022678081">902-267-8081</a> · <a href="mailto:sharon.epic@bootstraparts.com">sharon.epic@bootstraparts.com</a></div>
+    <a class="work-btn" href="mailto:sharon.epic@bootstraparts.com?subject=Work%20opportunity">Contact me about work</a>
     <div class="links">
       <a href="https://x.com/doctormaster233" target="_blank">@doctormaster233</a> ·
       <a href="https://www.quantumspatial.lol" target="_blank">quantumspatial.lol</a> ·
