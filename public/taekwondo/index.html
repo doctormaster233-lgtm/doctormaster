@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Served at /taekwondo (Next.js rewrites it to this file in next.config.ts). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#09090b">
+  <meta name="description" content="Animated 3D taekwondo techniques: stances, punches, blocks and kicks, with a mirror mode for home practice.">
+  <title>Taekwondo Techniques — Doctor Master</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #09090b; color: #fafafa;
+      font-family: Arial, Helvetica, sans-serif; }
+    body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+    header { padding: 12px 16px 4px; font-size: 12px; letter-spacing: .15em; }
+    header a { color: #fff; text-decoration: none; text-transform: uppercase; }
+    header a span { color: #a1a1aa; text-transform: none; }
+    #stage { position: relative; flex: 1 1 auto; min-height: 0; touch-action: none; }
+    #stage canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+    #stage canvas:active { cursor: grabbing; }
+    #hint { position: absolute; right: 10px; top: 6px; font-size: 11px; color: #71717a; pointer-events: none; }
+    #phase { position: absolute; left: 12px; top: 6px; font-size: 11px; letter-spacing: .12em;
+      color: #a78bfa; text-transform: uppercase; pointer-events: none; }
+    #panel { flex: 0 0 auto; padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+      border-top: 1px solid #27272a; background: rgba(24,24,27,.6); }
+    .row { display: flex; gap: 8px; align-items: center; max-width: 640px; margin: 0 auto; }
+    .row + .row { margin-top: 8px; }
+    select, button { font: inherit; color: #fafafa; background: #18181b; border: 1px solid #3f3f46;
+      border-radius: 10px; padding: 9px 10px; }
+    select { flex: 1; min-width: 0; font-size: 15px; }
+    button { flex: 0 0 auto; cursor: pointer; min-width: 42px; font-size: 14px; }
+    button[aria-pressed="true"] { background: #4c1d95; border-color: #8b5cf6; }
+    button:hover, select:hover { border-color: #71717a; }
+    label.speed { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #a1a1aa; min-width: 0; }
+    label.speed input { flex: 1; min-width: 0; accent-color: #8b5cf6; }
+    #info { max-width: 640px; margin: 8px auto 0; min-height: 2.6em; }
+    #korean { color: #a1a1aa; font-size: 13px; letter-spacing: .03em; }
+    #cue { margin: 3px 0 0; font-size: 14px; line-height: 1.35; color: #e4e4e7; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+  <header><a href="/">Doctor Master <span>— taekwondo</span></a></header>
+  <div id="stage"><div id="phase"></div><div id="hint">drag to rotate · pinch/scroll to zoom</div></div>
+  <div id="panel">
+    <div class="row">
+      <button id="prev" aria-label="Previous technique">‹</button>
+      <select id="tech" aria-label="Choose a technique"></select>
+      <button id="next" aria-label="Next technique">›</button>
+    </div>
+    <div class="row">
+      <button id="play" aria-label="Pause">❚❚</button>
+      <label class="speed">Speed <input id="speed" type="range" min="0.2" max="2" step="0.1" value="1"><span id="speedv">1×</span></label>
+      <button id="mirror" aria-pressed="false" title="Flip left/right, as if you were facing a mirror">Mirror</button>
+    </div>
+    <div id="info"><div id="korean"></div><p id="cue"></p></div>
+  </div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+/* =====================================================================
+   TECHNIQUES — add new techniques here.
+
+   Each technique is a list of keyframes. The figure moves smoothly from one
+   keyframe to the next and loops back to the first (a technique with one
+   frame is a held stance). Keyframe fields:
+     label   shown top-left while that phase plays (e.g. "chamber")
+     d       seconds to move INTO this frame (default 0.4) — the speed slider scales it
+     hold    seconds to pause on this frame (default 0.15)
+     lift    metres to raise the whole body (for jumps)
+     ...joints  angles in degrees; anything left out = 0 (neutral standing).
+
+   Joint conventions (same as /yoga). The figure faces +Z; its left is +X.
+     root [x,y,z]   whole body. x+ tip forward, y+ turn to the left, z+ lean right
+     spine, chest [x,y,z]  x+ bend forward, y+ twist left, z+ side-bend right
+     neck [x,y,z]   x+ chin down, y+ turn head left
+     lShoulder/rShoulder [x,y,z]  arm hangs down at 0. x+ raise forward
+                    (90 ahead, 180 overhead), x- reach back, z+ out to the side,
+                    z- across the body
+     lElbow/rElbow, lKnee/rKnee  bend in degrees
+     lWrist/rWrist  x+ fold the hand forward, x- bend it back (palm heel)
+     lHip/rHip [x,y,z]  leg hangs down at 0. x+ lift forward, x- extend back,
+                    z+ out to the side, y twist (changes which way the knee bends)
+     lAnkle/rAnkle  x+ point the toes, x- pull the toes up
+
+   The body is lowered so its lowest point touches the floor, so the standing
+   foot stays planted. Spread the shared building blocks below (STANCE / ARM
+   pieces) to keep entries short. "Mirror" in the page flips left and right.
+
+   FORMS (poomsae) — placeholder. Taegeuk Il Jang to Pal Jang (1–8) will go
+   in a FORMS object with the same keyframe format, one long sequence per form,
+   plus a `turn` (degrees, root y) per step to follow the floor pattern, e.g.
+     const FORMS = {
+       taegeuk1: { name: "Taegeuk Il Jang", korean: "태극 1장", cat: "Forms",
+         cue: "...", frames: [ { label: "1. left low block", ... }, ... ] },
+     };
+   and get merged into the dropdown with Object.assign(TECHNIQUES, FORMS).
+   ===================================================================== */
+
+// ---- shared building blocks ----
+const READY_ARMS = { lShoulder: [22, 0, 8], lElbow: 45, rShoulder: [22, 0, 8], rElbow: 45 };
+const GUARD = { lShoulder: [40, 0, 8], lElbow: 105, rShoulder: [25, 0, 10], rElbow: 115 };
+const L_HIP_FIST = { lShoulder: [-25, 0, 8], lElbow: 100 };   // fist chambered at the belt
+const R_HIP_FIST = { rShoulder: [-25, 0, 8], rElbow: 100 };
+const L_PUNCH_MID = { lShoulder: [86, 0, -10], lElbow: 0 };
+const R_PUNCH_MID = { rShoulder: [86, 0, -10], rElbow: 0 };
+// stances: left foot forward unless noted
+const WALK = { lHip: [22, 0, 0], lAnkle: 18, rHip: [-16, 0, 0], rAnkle: -16 };          // ap seogi
+const FRONT = { lHip: [48, 0, 0], lKnee: 48, rHip: [-33, 0, 0], rAnkle: -33 };         // ap kubi
+const HORSE = { lHip: [0, 90, 42], lKnee: 42, rHip: [0, 90, 42], rKnee: 42 };       // juchum seogi
+const BACK = { root: [0, -70, 0], chest: [0, 50, 0], neck: [0, 20, 0],
+  lHip: [28, 0, 0], lKnee: 22, lAnkle: 0, rHip: [12, 90, 30], rKnee: 50 };            // dwit kubi
+const FIGHT = { ...WALK, ...GUARD, root: [0, -20, 0], chest: [0, 10, 0] };            // fighting stance
+const ON_LEFT = { lHip: [5, 0, 0], lKnee: 10, lAnkle: -5 };                          // balanced on left leg
+
+const TECHNIQUES = {
+  // ---------------- Stances ----------------
+  joonbi: { cat: "Stances", name: "Ready Stance", korean: "Joonbi Seogi · 준비 서기",
+    cue: "Feet shoulder-width, fists in front of the belt, elbows slightly bent, eyes forward.",
+    frames: [{ ...READY_ARMS, lHip: [0, 0, 6], rHip: [0, 0, 6] }] },
+  apSeogi: { cat: "Stances", name: "Walking Stance", korean: "Ap Seogi · 앞 서기",
+    cue: "A natural walking step, both legs straight, feet facing forward, weight even.",
+    frames: [{ ...WALK, ...R_HIP_FIST, ...L_HIP_FIST }] },
+  apKubi: { cat: "Stances", name: "Front Stance", korean: "Ap Kubi · 앞 굽이",
+    cue: "Long and wide: front knee bent over the toes, back leg locked straight, 2/3 weight forward.",
+    frames: [{ ...FRONT, ...R_HIP_FIST, ...L_HIP_FIST }] },
+  dwitKubi: { cat: "Stances", name: "Back Stance", korean: "Dwit Kubi · 뒷 굽이",
+    cue: "Feet in an L, back knee deeply bent carrying 70% of the weight, front leg light.",
+    frames: [{ ...BACK, lShoulder: [60, 0, 20], lElbow: 80, rShoulder: [30, 0, -10], rElbow: 115 }] },
+  juchum: { cat: "Stances", name: "Horse Riding Stance", korean: "Juchum Seogi · 주춤 서기",
+    cue: "Feet two shoulder-widths apart and parallel, sit low, knees pushed out, back upright.",
+    frames: [{ ...HORSE, ...R_HIP_FIST, ...L_HIP_FIST }] },
+  beomSeogi: { cat: "Stances", name: "Cat Stance", korean: "Beom Seogi · 범 서기",
+    cue: "Almost all weight on the bent back leg; front foot rests lightly on the ball of the foot.",
+    frames: [{ ...GUARD, root: [0, -25, 0], rHip: [45, 0, 0], rKnee: 60, rAnkle: -15,
+      lHip: [40, 0, 0], lKnee: 90, lAnkle: 55 }] },
+
+  // ---------------- Punches & strikes ----------------
+  momtongJireugi: { cat: "Punches & strikes", name: "Middle Punch", korean: "Momtong Jireugi · 몸통 지르기",
+    cue: "From the belt, drive the fist to solar-plexus height, twisting palm-down at impact.",
+    frames: [
+      { label: "chamber", ...WALK, ...R_HIP_FIST, ...L_PUNCH_MID, hold: 0.3 },
+      { label: "punch", ...WALK, ...R_PUNCH_MID, ...L_HIP_FIST, d: 0.25, hold: 0.4 },
+      { label: "retract", ...WALK, ...R_HIP_FIST, ...L_PUNCH_MID, d: 0.35 }] },
+  olgulJireugi: { cat: "Punches & strikes", name: "High Punch", korean: "Olgul Jireugi · 얼굴 지르기",
+    cue: "Same punch aimed at face height — philtrum level — with the shoulder kept down.",
+    frames: [
+      { label: "chamber", ...WALK, ...R_HIP_FIST, lShoulder: [105, 0, -10], hold: 0.3 },
+      { label: "punch", ...WALK, rShoulder: [108, 0, -10], ...L_HIP_FIST, d: 0.25, hold: 0.4 },
+      { label: "retract", ...WALK, ...R_HIP_FIST, lShoulder: [105, 0, -10], d: 0.35 }] },
+  araeJireugi: { cat: "Punches & strikes", name: "Low Punch", korean: "Arae Jireugi · 아래 지르기",
+    cue: "Punch down and forward to the lower abdomen, sinking into a front stance.",
+    frames: [
+      { label: "chamber", ...FRONT, ...R_HIP_FIST, lShoulder: [50, 0, -8], hold: 0.3 },
+      { label: "punch", ...FRONT, rShoulder: [50, 0, -10], ...L_HIP_FIST, spine: [8, 0, 0], d: 0.25, hold: 0.4 },
+      { label: "retract", ...FRONT, ...R_HIP_FIST, lShoulder: [50, 0, -8], d: 0.35 }] },
+  bandaeJireugi: { cat: "Punches & strikes", name: "Reverse Punch", korean: "Bandae Jireugi · 반대 지르기",
+    cue: "Front stance with the left leg forward; punch with the RIGHT hand, hips driving the turn.",
+    frames: [
+      { label: "chamber", ...FRONT, root: [0, 15, 0], ...R_HIP_FIST, ...L_PUNCH_MID, hold: 0.3 },
+      { label: "punch", ...FRONT, root: [0, -15, 0], ...R_PUNCH_MID, ...L_HIP_FIST, d: 0.25, hold: 0.4 },
+      { label: "retract", ...FRONT, root: [0, 15, 0], ...R_HIP_FIST, ...L_PUNCH_MID, d: 0.35 }] },
+  dubeonJireugi: { cat: "Punches & strikes", name: "Double Punch", korean: "Dubeon Jireugi · 두번 지르기",
+    cue: "Two fast middle punches, right then left, each fist returning to the belt.",
+    frames: [
+      { label: "chamber", ...WALK, ...R_HIP_FIST, ...L_HIP_FIST, hold: 0.25 },
+      { label: "punch 1", ...WALK, ...R_PUNCH_MID, ...L_HIP_FIST, d: 0.22, hold: 0.1 },
+      { label: "punch 2", ...WALK, ...R_HIP_FIST, ...L_PUNCH_MID, d: 0.22, hold: 0.4 },
+      { label: "retract", ...WALK, ...R_HIP_FIST, ...L_HIP_FIST, d: 0.35 }] },
+  sonnalChigi: { cat: "Punches & strikes", name: "Knife-Hand Strike", korean: "Sonnal Mok Chigi · 손날 목치기",
+    cue: "Open hand starts by the opposite ear, then whips out to strike the neck with the blade edge.",
+    frames: [
+      { label: "chamber", ...HORSE, rShoulder: [95, 0, -55], rElbow: 140, ...L_HIP_FIST, hold: 0.3 },
+      { label: "strike", ...HORSE, rShoulder: [90, 0, 45], rElbow: 10, ...L_HIP_FIST, d: 0.25, hold: 0.4 },
+      { label: "retract", ...HORSE, ...R_HIP_FIST, ...L_HIP_FIST, d: 0.4 }] },
+  deungJumeok: { cat: "Punches & strikes", name: "Back Fist Strike", korean: "Deung Jumeok Ap Chigi · 등주먹 앞치기",
+    cue: "Fist chambers by the opposite shoulder, then snaps forward to strike with the back of the knuckles.",
+    frames: [
+      { label: "chamber", ...WALK, rShoulder: [70, 0, -45], rElbow: 150, ...L_HIP_FIST, hold: 0.3 },
+      { label: "strike", ...WALK, rShoulder: [100, 0, 0], rElbow: 20, ...L_HIP_FIST, d: 0.22, hold: 0.4 },
+      { label: "retract", ...WALK, ...R_HIP_FIST, ...L_HIP_FIST, d: 0.4 }] },
+  batangson: { cat: "Punches & strikes", name: "Palm Heel Strike", korean: "Batangson Chigi · 바탕손 치기",
+    cue: "Hand pulled back, fingers up; thrust forward striking with the heel of the palm.",
+    frames: [
+      { label: "chamber", ...FRONT, rShoulder: [-20, 0, 8], rElbow: 110, rWrist: -60, ...L_HIP_FIST, hold: 0.3 },
+      { label: "strike", ...FRONT, root: [0, -15, 0], rShoulder: [88, 0, -10], rWrist: -75, ...L_HIP_FIST, d: 0.25, hold: 0.4 },
+      { label: "retract", ...FRONT, rShoulder: [-20, 0, 8], rElbow: 110, rWrist: -60, ...L_HIP_FIST, d: 0.4 }] },
+  palkup: { cat: "Punches & strikes", name: "Elbow Strike", korean: "Palkup Dollyo Chigi · 팔굽 돌려치기",
+    cue: "Fold the arm tight and swing the point of the elbow round to the target's jaw, hips turning.",
+    frames: [
+      { label: "chamber", ...FRONT, root: [0, 15, 0], ...R_HIP_FIST, lShoulder: [40, 0, 8], lElbow: 105, hold: 0.3 },
+      { label: "strike", ...FRONT, root: [0, -25, 0], rShoulder: [90, 0, -15], rElbow: 155, lShoulder: [-20, 0, 8], lElbow: 100, d: 0.25, hold: 0.4 },
+      { label: "retract", ...FRONT, root: [0, 15, 0], ...R_HIP_FIST, lShoulder: [40, 0, 8], lElbow: 105, d: 0.4 }] },
+
+  // ---------------- Blocks ----------------
+  araeMakgi: { cat: "Blocks", name: "Low Block", korean: "Arae Makgi · 아래 막기",
+    cue: "Blocking fist starts at the opposite shoulder and sweeps down to a fist's width above the front knee.",
+    frames: [
+      { label: "chamber", ...FRONT, lShoulder: [55, 0, -40], lElbow: 140, rShoulder: [40, 0, 10], rElbow: 0, hold: 0.3 },
+      { label: "block", ...FRONT, lShoulder: [30, 0, 12], lElbow: 5, ...R_HIP_FIST, d: 0.28, hold: 0.5 },
+      { label: "reset", ...FRONT, ...L_HIP_FIST, ...R_HIP_FIST, d: 0.4 }] },
+  anMakgi: { cat: "Blocks", name: "Middle Block (inner)", korean: "Momtong An Makgi · 몸통 안 막기",
+    cue: "Fist starts out beside the head and sweeps in across the body, forearm vertical at chest height.",
+    frames: [
+      { label: "chamber", ...WALK, lShoulder: [50, 0, 80], lElbow: 100, ...R_PUNCH_MID, hold: 0.3 },
+      { label: "block", ...WALK, lShoulder: [60, 0, -12], lElbow: 95, ...R_HIP_FIST, d: 0.28, hold: 0.5 },
+      { label: "reset", ...WALK, ...L_HIP_FIST, ...R_HIP_FIST, d: 0.4 }] },
+  bakkatMakgi: { cat: "Blocks", name: "Middle Block (outer)", korean: "Momtong Bakkat Makgi · 몸통 바깥 막기",
+    cue: "Fist starts under the opposite armpit and sweeps outward, forearm vertical at shoulder line.",
+    frames: [
+      { label: "chamber", ...WALK, lShoulder: [25, 0, -45], lElbow: 100, ...R_PUNCH_MID, hold: 0.3 },
+      { label: "block", ...WALK, lShoulder: [60, 0, 32], lElbow: 95, ...R_HIP_FIST, d: 0.28, hold: 0.5 },
+      { label: "reset", ...WALK, ...L_HIP_FIST, ...R_HIP_FIST, d: 0.4 }] },
+  olgulMakgi: { cat: "Blocks", name: "High (Rising) Block", korean: "Olgul Makgi · 얼굴 막기",
+    cue: "Forearm rises past the face to end a fist above the forehead, angled to deflect upward.",
+    frames: [
+      { label: "chamber", ...FRONT, ...L_HIP_FIST, rShoulder: [70, 0, -10], rElbow: 60, hold: 0.3 },
+      { label: "block", ...FRONT, lShoulder: [145, 0, -15], lElbow: 100, ...R_HIP_FIST, d: 0.28, hold: 0.5 },
+      { label: "reset", ...FRONT, ...L_HIP_FIST, ...R_HIP_FIST, d: 0.4 }] },
+  sonnalMakgi: { cat: "Blocks", name: "Knife-Hand Block", korean: "Hansonnal Makgi · 한손날 막기",
+    cue: "In back stance, the open blade hand sweeps out from the opposite shoulder to guard the side.",
+    frames: [
+      { label: "chamber", ...BACK, lShoulder: [40, 0, -45], lElbow: 130, rShoulder: [60, 0, 20], rElbow: 30, hold: 0.3 },
+      { label: "block", ...BACK, lShoulder: [65, 0, 30], lElbow: 60, ...R_HIP_FIST, d: 0.28, hold: 0.5 }] },
+  sonnalDubeon: { cat: "Blocks", name: "Double Knife-Hand Block", korean: "Sonnal Momtong Makgi · 손날 몸통 막기",
+    cue: "Back stance: front blade hand blocks out at shoulder height while the rear hand guards the solar plexus.",
+    frames: [
+      { label: "chamber", ...BACK, lShoulder: [40, 0, -40], lElbow: 130, rShoulder: [-10, 0, 25], rElbow: 70, hold: 0.3 },
+      { label: "block", ...BACK, lShoulder: [65, 0, 30], lElbow: 70, rShoulder: [40, 0, -15], rElbow: 120, d: 0.3, hold: 0.5 }] },
+
+  // ---------------- Kicks (right / rear leg) ----------------
+  apChagi: { cat: "Kicks", name: "Front Snap Kick", korean: "Ap Chagi · 앞 차기",
+    cue: "Raise the knee high, snap the lower leg out striking with the ball of the foot, snap back.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "chamber", ...GUARD, ...ON_LEFT, rHip: [95, 0, 0], rKnee: 120, rAnkle: 40, d: 0.3 },
+      { label: "kick", ...GUARD, ...ON_LEFT, rHip: [92, 0, 0], rKnee: 0, rAnkle: 45, root: [-5, 0, 0], d: 0.18, hold: 0.25 },
+      { label: "retract", ...GUARD, ...ON_LEFT, rHip: [95, 0, 0], rKnee: 120, rAnkle: 40, d: 0.2 },
+      { label: "land", ...FIGHT, d: 0.35 }] },
+  dollyoChagi: { cat: "Kicks", name: "Roundhouse Kick", korean: "Dollyo Chagi · 돌려 차기",
+    cue: "Pivot on the standing foot, bring the knee round level, snap the instep or ball of foot across.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "chamber", ...GUARD, ...ON_LEFT, root: [0, 60, 0], spine: [0, 0, -15], rHip: [30, 0, 80], rKnee: 120, rAnkle: 50, d: 0.3 },
+      { label: "kick", ...GUARD, ...ON_LEFT, root: [0, 80, 0], spine: [0, 0, -25], rHip: [20, 0, 85], rKnee: 5, rAnkle: 60, d: 0.18, hold: 0.25 },
+      { label: "retract", ...GUARD, ...ON_LEFT, root: [0, 60, 0], spine: [0, 0, -15], rHip: [30, 0, 80], rKnee: 120, rAnkle: 50, d: 0.2 },
+      { label: "land", ...FIGHT, d: 0.35 }] },
+  yopChagi: { cat: "Kicks", name: "Side Kick", korean: "Yop Chagi · 옆 차기",
+    cue: "Turn side-on, knee up to the chest, thrust the heel out in a straight line, body leaning away.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "chamber", ...GUARD, ...ON_LEFT, root: [0, 85, 0], neck: [0, -70, 0], rHip: [80, 0, 35], rKnee: 135, rAnkle: -20, d: 0.3 },
+      { label: "kick", ...GUARD, ...ON_LEFT, root: [0, 90, 0], neck: [0, -80, 0], spine: [0, 0, -35], rHip: [0, 0, 85], rKnee: 0, rAnkle: -25, d: 0.2, hold: 0.3 },
+      { label: "retract", ...GUARD, ...ON_LEFT, root: [0, 85, 0], neck: [0, -70, 0], rHip: [80, 0, 35], rKnee: 135, rAnkle: -20, d: 0.22 },
+      { label: "land", ...FIGHT, d: 0.4 }] },
+  dwitChagi: { cat: "Kicks", name: "Back Kick", korean: "Dwit Chagi · 뒤 차기",
+    cue: "Turn your back to the target, look over the shoulder, drive the heel straight back.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "turn", ...GUARD, ...ON_LEFT, root: [10, 180, 0], neck: [0, 60, 0], rHip: [90, 0, 0], rKnee: 130, rAnkle: -20, d: 0.35 },
+      { label: "kick", ...GUARD, ...ON_LEFT, root: [35, 180, 0], neck: [-20, 60, 0], lHip: [35, 0, 0], rHip: [-55, 0, 0], rKnee: 0, rAnkle: -30, d: 0.2, hold: 0.3 },
+      { label: "retract", ...GUARD, ...ON_LEFT, root: [10, 180, 0], neck: [0, 60, 0], rHip: [90, 0, 0], rKnee: 130, rAnkle: -20, d: 0.22 },
+      { label: "land", ...FIGHT, root: [0, 340, 0], d: 0.45 }] },
+  naeryoChagi: { cat: "Kicks", name: "Axe Kick", korean: "Naeryo Chagi · 내려 차기",
+    cue: "Swing the straight leg up high above head height, then chop the heel straight down.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "raise", ...GUARD, ...ON_LEFT, root: [-10, 0, 0], rHip: [150, 0, 15], rKnee: 10, rAnkle: -10, d: 0.4, hold: 0.1 },
+      { label: "chop", ...GUARD, ...ON_LEFT, rHip: [70, 0, 0], rKnee: 0, rAnkle: -20, d: 0.2, hold: 0.2 },
+      { label: "land", ...FIGHT, d: 0.35 }] },
+  anChagi: { cat: "Kicks", name: "Inside Crescent Kick", korean: "An Chagi · 안 차기",
+    cue: "Straight leg sweeps up from outside to inside in an arc, striking with the sole.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "swing out", ...GUARD, ...ON_LEFT, rHip: [80, 0, 45], rAnkle: -10, d: 0.3 },
+      { label: "top", ...GUARD, ...ON_LEFT, rHip: [120, 0, 5], rAnkle: -10, d: 0.18 },
+      { label: "sweep in", ...GUARD, ...ON_LEFT, rHip: [80, 0, -30], rAnkle: -10, d: 0.18 },
+      { label: "land", ...FIGHT, d: 0.4 }] },
+  bakkatChagi: { cat: "Kicks", name: "Outside Crescent Kick", korean: "Bakkat Chagi · 바깥 차기",
+    cue: "Straight leg sweeps up across the body and out in an arc, striking with the outer edge of the foot.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "swing across", ...GUARD, ...ON_LEFT, rHip: [80, 0, -30], rAnkle: -10, d: 0.3 },
+      { label: "top", ...GUARD, ...ON_LEFT, rHip: [120, 0, 5], rAnkle: -10, d: 0.18 },
+      { label: "sweep out", ...GUARD, ...ON_LEFT, rHip: [80, 0, 50], rAnkle: -10, d: 0.18 },
+      { label: "land", ...FIGHT, d: 0.4 }] },
+  huryeoChagi: { cat: "Kicks", name: "Hook Kick", korean: "Huryeo Chagi · 후려 차기",
+    cue: "Like a side kick aimed just past the target, then whip the heel back with a bend of the knee.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "chamber", ...GUARD, ...ON_LEFT, root: [0, 85, 0], neck: [0, -70, 0], rHip: [80, 0, 35], rKnee: 135, d: 0.3 },
+      { label: "extend", ...GUARD, ...ON_LEFT, root: [0, 90, 0], neck: [0, -80, 0], spine: [0, 0, -35], rHip: [25, 0, 85], rKnee: 0, d: 0.2 },
+      { label: "hook", ...GUARD, ...ON_LEFT, root: [0, 90, 0], neck: [0, -80, 0], spine: [0, 0, -35], rHip: [-5, 0, 85], rKnee: 90, d: 0.15, hold: 0.2 },
+      { label: "land", ...FIGHT, d: 0.45 }] },
+  mireoChagi: { cat: "Kicks", name: "Push Kick", korean: "Mireo Chagi · 밀어 차기",
+    cue: "Knee up, then push the whole sole forward through the target to drive it away.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "chamber", ...GUARD, ...ON_LEFT, rHip: [105, 0, 0], rKnee: 125, rAnkle: -20, d: 0.3 },
+      { label: "push", ...GUARD, ...ON_LEFT, root: [-15, 0, 0], rHip: [95, 0, 0], rKnee: 5, rAnkle: -30, d: 0.25, hold: 0.3 },
+      { label: "retract", ...GUARD, ...ON_LEFT, rHip: [105, 0, 0], rKnee: 125, rAnkle: -20, d: 0.25 },
+      { label: "land", ...FIGHT, d: 0.35 }] },
+  dolgeHuryeo: { cat: "Kicks", name: "Spinning Hook Kick", korean: "Dwi Huryeo Chagi · 뒤 후려 차기",
+    cue: "Spin backwards on the front foot, keep the eyes on the target, and sweep the heel round through it.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "spin", ...GUARD, ...ON_LEFT, root: [0, 160, 0], neck: [0, 60, 0], rHip: [40, 0, 40], rKnee: 60, d: 0.3 },
+      { label: "sweep", ...GUARD, ...ON_LEFT, root: [0, 250, 0], spine: [0, 0, -30], rHip: [15, 0, 85], rKnee: 10, d: 0.22 },
+      { label: "hook", ...GUARD, ...ON_LEFT, root: [0, 300, 0], spine: [0, 0, -25], rHip: [-5, 0, 80], rKnee: 90, d: 0.18 },
+      { label: "land", ...FIGHT, root: [0, 340, 0], d: 0.35 }] },
+  dolgeDwit: { cat: "Kicks", name: "Spinning Back Kick", korean: "Dwi Dora Dwit Chagi · 뒤돌아 뒤차기",
+    cue: "Spin your back to the target, look over the shoulder, and drive the heel straight through.",
+    frames: [
+      { label: "stance", ...FIGHT, hold: 0.25 },
+      { label: "spin", ...GUARD, ...ON_LEFT, root: [10, 180, 0], neck: [0, 60, 0], rHip: [90, 0, 0], rKnee: 130, rAnkle: -20, d: 0.3 },
+      { label: "kick", ...GUARD, ...ON_LEFT, root: [35, 180, 0], neck: [-20, 60, 0], lHip: [35, 0, 0], rHip: [-55, 0, 0], rKnee: 0, rAnkle: -30, d: 0.2, hold: 0.3 },
+      { label: "land", ...FIGHT, root: [0, 340, 0], d: 0.4 }] },
+  twimyoApChagi: { cat: "Kicks", name: "Jump Front Kick", korean: "Twimyo Ap Chagi · 뛰어 앞 차기",
+    cue: "Drive the left knee up to jump, then snap the right front kick at the top; land in guard.",
+    frames: [
+      { label: "crouch", ...GUARD, lHip: [40, 0, 0], lKnee: 60, lAnkle: -20, rHip: [40, 0, 0], rKnee: 60, rAnkle: -20, hold: 0.1 },
+      { label: "jump", ...GUARD, lHip: [100, 0, 0], lKnee: 130, lAnkle: 40, rHip: [10, 0, 0], rKnee: 20, rAnkle: 40, lift: 0.35, d: 0.22 },
+      { label: "kick", ...GUARD, root: [-8, 0, 0], lHip: [60, 0, 0], lKnee: 120, lAnkle: 40, rHip: [95, 0, 0], rKnee: 0, rAnkle: 45, lift: 0.4, d: 0.15, hold: 0.1 },
+      { label: "land", ...GUARD, lHip: [35, 0, 0], lKnee: 50, lAnkle: -15, rHip: [35, 0, 0], rKnee: 50, rAnkle: -15, d: 0.3 }] },
+  mureupChigi: { cat: "Kicks", name: "Knee Strike", korean: "Mureup Chigi · 무릎 치기",
+    cue: "Grab and pull the target's head down with both hands while driving the knee up into it.",
+    frames: [
+      { label: "reach", ...FIGHT, lShoulder: [105, 0, 0], lElbow: 30, rShoulder: [105, 0, 0], rElbow: 30, hold: 0.2 },
+      { label: "strike", ...ON_LEFT, root: [-10, 0, 0], lShoulder: [60, 0, -5], lElbow: 90, rShoulder: [60, 0, -5], rElbow: 90, rHip: [115, 0, 0], rKnee: 150, rAnkle: 40, d: 0.25, hold: 0.3 },
+      { label: "land", ...FIGHT, lShoulder: [105, 0, 0], lElbow: 30, rShoulder: [105, 0, 0], rElbow: 30, d: 0.35 }] },
+};
+/* ---------------- figure ---------------- */
+const D = Math.PI / 180;
+const JOINTS = ["root","spine","chest","neck","lShoulder","rShoulder","lElbow","rElbow",
+  "lWrist","rWrist","lHip","rHip","lKnee","rKnee","lAnkle","rAnkle"];
+const SCALAR = new Set(["lElbow","rElbow","lWrist","rWrist","lKnee","rKnee","lAnkle","rAnkle"]);
+function full(p) {   // fill defaults so every joint has a value
+  const o = {};
+  for (const j of JOINTS) o[j] = SCALAR.has(j) ? (p[j] ?? 0) : [...(p[j] ?? [0,0,0])];
+  return o;
+}
+
+const scene = new THREE.Scene();
+const stage = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+stage.appendChild(renderer.domElement);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
+camera.position.set(2.6, 1.6, 3.4);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.6, 0);
+controls.enableDamping = true; controls.enablePan = false;
+controls.minDistance = 1.5; controls.maxDistance = 9;
+controls.maxPolarAngle = Math.PI * 0.95;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x303038, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+sun.position.set(2, 5, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -2.5, right: 2.5, top: 2.5, bottom: -2.5 });
+scene.add(sun);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(3, 48),
+  new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 1 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const mat = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.01, 1.85),
+  new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.9 }));
+mat.position.y = 0.005; mat.receiveShadow = true; scene.add(mat);
+
+const skin = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.55 });
+const jointMat = new THREE.MeshStandardMaterial({ color: 0x8b5cf6, roughness: 0.4 });
+const leftMat = new THREE.MeshStandardMaterial({ color: 0xa1a1aa, roughness: 0.55 }); // left side slightly darker
+function seg(parent, len, r, m = skin, dir = -1) {
+  const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(len - 2 * r, 0.001), 6, 12), m);
+  mesh.position.y = dir * len / 2; mesh.castShadow = true; parent.add(mesh); return mesh;
+}
+function ball(parent, r, y = 0) {
+  const b = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), jointMat);
+  b.position.y = y; b.castShadow = true; parent.add(b); return b;
+}
+function group(parent, x, y, z, order = "XYZ") {
+  const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.order = order; parent.add(g); return g;
+}
+
+const figure = new THREE.Group(); scene.add(figure);
+const J = {};
+J.root = group(figure, 0, 0.97, 0);
+const pelvis = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.12, 6, 12), skin);
+pelvis.rotation.z = Math.PI / 2; pelvis.castShadow = true; J.root.add(pelvis);
+J.spine = group(J.root, 0, 0.05, 0); seg(J.spine, 0.26, 0.09, skin, 1);
+J.chest = group(J.spine, 0, 0.26, 0); ball(J.spine, 0.075, 0.26);
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.1, 6, 12), skin);
+torso.scale.set(1.25, 1, 0.8); torso.position.y = 0.15; torso.castShadow = true; J.chest.add(torso);
+J.neck = group(J.chest, 0, 0.32, 0); seg(J.neck, 0.08, 0.04, skin, 1);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 24, 16), skin);
+head.scale.set(0.9, 1.1, 1); head.position.set(0, 0.18, 0.01); head.castShadow = true; J.neck.add(head);
+const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.05, 8), jointMat); // shows which way the face points
+nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.17, 0.11); J.neck.add(nose);
+
+for (const s of ["l", "r"]) {
+  const sx = s === "l" ? 1 : -1, m = s === "l" ? leftMat : skin;
+  const sh = J[s + "Shoulder"] = group(J.chest, sx * 0.2, 0.27, 0); ball(sh, 0.055);
+  seg(sh, 0.3, 0.045, m);
+  const el = J[s + "Elbow"] = group(sh, 0, -0.3, 0); ball(el, 0.045); seg(el, 0.27, 0.04, m);
+  const wr = J[s + "Wrist"] = group(el, 0, -0.27, 0); ball(wr, 0.035);
+  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.03), m);
+  hand.position.y = -0.09; hand.castShadow = true; wr.add(hand);
+  const hp = J[s + "Hip"] = group(J.root, sx * 0.1, -0.03, 0, "ZXY"); ball(hp, 0.07);
+  seg(hp, 0.45, 0.07, m);
+  const kn = J[s + "Knee"] = group(hp, 0, -0.45, 0); ball(kn, 0.06); seg(kn, 0.43, 0.055, m);
+  const an = J[s + "Ankle"] = group(kn, 0, -0.43, 0); ball(an, 0.045);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.24), m);
+  foot.position.set(0, -0.04, 0.07); foot.castShadow = true; an.add(foot);
+}
+
+// Apply a full pose object (angles in degrees) to the rig.
+
+// Pose a full joint set (degrees). Ground the lowest point, keep a fixed horizontal centre.
+J.root.rotation.order = "YXZ"; // turn first, then lean, so leans work after spins
+let centre = { x: 0, z: 0 };
+function apply(p, lift = 0) {
+  const set = (g, [x, y, z]) => g.rotation.set(x * D, y * D, z * D);
+  set(J.root, [p.root[0], p.root[1], -p.root[2]]);
+  set(J.spine, p.spine.map((v, i) => i === 2 ? -v : v));
+  set(J.chest, p.chest.map((v, i) => i === 2 ? -v : v));
+  set(J.neck, p.neck);
+  for (const s of ["l", "r"]) {
+    const m = s === "l" ? 1 : -1;
+    const sh = p[s + "Shoulder"], hp = p[s + "Hip"];
+    J[s + "Shoulder"].rotation.set(-sh[0] * D, m * sh[1] * D, m * sh[2] * D);
+    J[s + "Elbow"].rotation.set(-p[s + "Elbow"] * D, 0, 0);
+    J[s + "Wrist"].rotation.set(-p[s + "Wrist"] * D, 0, 0);
+    J[s + "Hip"].rotation.set(-hp[0] * D, m * hp[1] * D, m * hp[2] * D);
+    J[s + "Knee"].rotation.set(p[s + "Knee"] * D, 0, 0);
+    J[s + "Ankle"].rotation.set(p[s + "Ankle"] * D, 0, 0);
+  }
+  J.root.position.set(0, 0.97, 0);
+  figure.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(figure, true);
+  J.root.position.set(-centre.x, 0.97 - box.min.y + 0.01 + lift, -centre.z);
+  return box;
+}
+
+/* ---------------- keyframe player ---------------- */
+let tech, frames, idx = 0, segStart = 0, playing = true, speed = 1, from, holdUntil = 0;
+const ease = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const lerp = (a, b, k) => Array.isArray(a) ? a.map((v, i) => v + (b[i] - v) * k) : a + (b - a) * k;
+let current = full({});
+const phaseEl = document.getElementById("phase");
+
+function choose(key) {
+  tech = TECHNIQUES[key];
+  frames = tech.frames.map((f) => ({ pose: full(f), d: f.d ?? 0.4, hold: f.hold ?? 0.15, lift: f.lift ?? 0, label: f.label ?? "" }));
+  // fix the horizontal centre from the first frame so the standing foot doesn't slide
+  centre = { x: 0, z: 0 };
+  const b = apply(frames[0].pose); const c = b.getCenter(new THREE.Vector3());
+  centre = { x: c.x, z: c.z };
+  idx = 0; from = { pose: current, lift: 0 }; segStart = clock;
+  document.getElementById("korean").textContent = tech.korean;
+  document.getElementById("cue").textContent = tech.cue;
+  if (history.replaceState) history.replaceState(null, "", "#" + key);
+}
+
+let clock = 0, last = performance.now();
+function step(dt) {
+  const f = frames[idx];
+  const t = (clock - segStart) / f.d;
+  const k = ease(Math.min(1, t));
+  // turn the shortest way round for root y, so spins and loops don't unwind backwards
+  const fy = from.pose.root[1], ty = f.pose.root[1];
+  const adj = { ...from.pose, root: [from.pose.root[0], fy + 360 * Math.round((ty - fy) / 360), from.pose.root[2]] };
+  const p = {};
+  for (const j of JOINTS) p[j] = lerp(adj[j], f.pose[j], k);
+  current = p;
+  apply(p, lerp(from.lift, f.lift, k));
+  phaseEl.textContent = frames.length > 1 ? f.label : "";
+  if (playing && t >= 1 && frames.length > 1 && clock - segStart >= f.d + f.hold) {
+    from = { pose: f.pose, lift: f.lift }; idx = (idx + 1) % frames.length; segStart = clock;
+  }
+}
+
+const sel = document.getElementById("tech");
+const groups = {};
+for (const [k, t] of Object.entries(TECHNIQUES)) {
+  if (!groups[t.cat]) { groups[t.cat] = document.createElement("optgroup"); groups[t.cat].label = t.cat; sel.append(groups[t.cat]); }
+  groups[t.cat].append(new Option(`${t.name} — ${t.korean.split(" · ")[0]}`, k));
+}
+const keys = Object.keys(TECHNIQUES);
+sel.onchange = () => choose(sel.value);
+const go = (d) => { sel.value = keys[(keys.indexOf(sel.value) + d + keys.length) % keys.length]; choose(sel.value); };
+document.getElementById("prev").onclick = () => go(-1);
+document.getElementById("next").onclick = () => go(1);
+const playBtn = document.getElementById("play");
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? "❚❚" : "▶"; playBtn.setAttribute("aria-label", playing ? "Pause" : "Play"); };
+const sp = document.getElementById("speed");
+sp.oninput = () => { speed = +sp.value; document.getElementById("speedv").textContent = speed + "×"; };
+const mir = document.getElementById("mirror");
+mir.onclick = () => { const on = mir.getAttribute("aria-pressed") !== "true"; mir.setAttribute("aria-pressed", on); figure.scale.x = on ? -1 : 1; };
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h;
+  camera.position.setLength(Math.max(3.8, 4.8 / Math.min(1, camera.aspect * 1.4)));
+  camera.updateProjectionMatrix();
+}
+camera.position.set(1.2, 0.6, 3.4).normalize();
+controls.target.set(0, 0.85, 0);
+addEventListener("resize", resize);
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (playing) clock += dt * speed;
+  step();
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+const start = location.hash.slice(1);
+sel.value = TECHNIQUES[start] ? start : "joonbi";
+resize(); choose(sel.value);
+requestAnimationFrame(frame);
+
+// test hook for headless screenshots: jump to keyframe i of a technique, fully settled
+window.__tkd = { TECHNIQUES, camera, figure, J,
+  show(key, i) { sel.value = key; choose(key); playing = false; const f = frames[i];
+    idx = i; from = { pose: f.pose, lift: f.lift }; segStart = clock - 1e3; current = f.pose; apply(f.pose, f.lift); phaseEl.textContent = f.label; renderer.render(scene, camera);
+    const feet = ["lAnkle", "rAnkle"].map((a) => new THREE.Box3().setFromObject(J[a], true).min.y.toFixed(3));
+    return feet; } };
+</script>
+</body>
+</html>
