@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
       { source: "/yoga", destination: "/yoga/index.html" },
       // Animated 3D taekwondo techniques, a static page in public/taekwondo/.
       { source: "/taekwondo", destination: "/taekwondo/index.html" },
+      // Static CV page in public/cv/.
+      { source: "/cv", destination: "/cv/index.html" },
     ];
   },
 };
