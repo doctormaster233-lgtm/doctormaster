@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Served at /yoga (Next.js rewrites it to this file in next.config.ts). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#09090b">
+  <meta name="description" content="Interactive 3D yoga pose viewer: pick a pose and drag to see it from any angle.">
+  <title>Yoga Poses — Doctor Master</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #09090b; color: #fafafa;
+      font-family: Arial, Helvetica, sans-serif; }
+    body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+    header { padding: 12px 16px 4px; font-size: 12px; letter-spacing: .15em; }
+    header a { color: #fff; text-decoration: none; text-transform: uppercase; }
+    header a span { color: #a1a1aa; text-transform: none; }
+    #stage { position: relative; flex: 1 1 auto; min-height: 0; touch-action: none; }
+    #stage canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+    #stage canvas:active { cursor: grabbing; }
+    #hint { position: absolute; right: 10px; top: 6px; font-size: 11px; color: #71717a; pointer-events: none; }
+    #panel { flex: 0 0 auto; padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+      border-top: 1px solid #27272a; background: rgba(24,24,27,.6); }
+    .row { display: flex; gap: 8px; align-items: center; max-width: 640px; margin: 0 auto; }
+    select, button { font: inherit; color: #fafafa; background: #18181b; border: 1px solid #3f3f46;
+      border-radius: 10px; padding: 9px 10px; }
+    select { flex: 1; min-width: 0; font-size: 15px; }
+    button { flex: 0 0 auto; cursor: pointer; width: 42px; }
+    button:hover, select:hover { border-color: #71717a; }
+    #info { max-width: 640px; margin: 8px auto 0; min-height: 2.6em; }
+    #sanskrit { color: #a1a1aa; font-size: 13px; letter-spacing: .03em; }
+    #cue { margin: 3px 0 0; font-size: 14px; line-height: 1.35; color: #e4e4e7; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+  <header><a href="/">Doctor Master <span>— yoga poses</span></a></header>
+  <div id="stage"><div id="hint">drag to rotate · pinch/scroll to zoom</div></div>
+  <div id="panel">
+    <div class="row">
+      <button id="prev" aria-label="Previous pose">‹</button>
+      <select id="pose" aria-label="Choose a yoga pose"></select>
+      <button id="next" aria-label="Next pose">›</button>
+    </div>
+    <div id="info"><div id="sanskrit"></div><p id="cue"></p></div>
+  </div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+/* =====================================================================
+   POSES — add new poses here.
+   Angles are in degrees. Any joint you leave out stays at 0 (standing neutral).
+   The figure faces +Z (towards the default camera). Its left side is +X.
+
+   root   [x,y,z]  whole-body rotation at the pelvis. x+ = tip forward
+                   (90 = lying face down, -90 = lying on the back), y+ = turn left,
+                   z+ = tip the head towards the figure's right.
+   spine, chest [x,y,z]  lower / upper back. x+ = bend forward, x- = backbend,
+                   y+ = twist left, z+ = side-bend to the figure's right.
+   neck   [x,y,z]  x+ = chin down, x- = look up, y+ = turn head left.
+   lShoulder / rShoulder [x,y,z]  arm hangs down at 0.  x+ = raise forward
+                   (90 = straight ahead, 180 = overhead), x- = reach back,
+                   z+ = raise out to the side (90 = T-shape), y = twist.
+   lElbow / rElbow   number, bend in degrees (0 = straight).
+   lWrist / rWrist   number, x+ = fold the hand forward (90 = palm flat on the floor).
+   lHip / rHip   [x,y,z]  leg hangs down at 0. x+ = lift leg forward,
+                   x- = extend leg back, z+ = out to the side, y+ = twist leg
+                   about its own axis (turns which way the knee bends).
+                   Applied as: side (z), then forward/back (x), then twist (y).
+   lKnee / rKnee   number, bend in degrees (0 = straight).
+   lAnkle / rAnkle number, x+ = point the toes, x- = flex the foot up.
+
+   The figure is lowered automatically so its lowest point touches the floor,
+   and centred, so you never need to set a height.
+   ===================================================================== */
+const POSES = {
+  mountain: { name: "Mountain", sanskrit: "Tadasana",
+    cue: "Stand tall, feet together, weight even, arms by your sides, crown lifting.",
+    lShoulder: [0, 0, 6], rShoulder: [0, 0, 6] },
+
+  forwardFold: { name: "Standing Forward Fold", sanskrit: "Uttanasana",
+    cue: "Hinge at the hips with long legs and let the head hang; hands to shins or floor.",
+    root: [120, 0, 0], spine: [20, 0, 0], chest: [10, 0, 0], neck: [10, 0, 0],
+    lHip: [120, 0, 0], rHip: [120, 0, 0],
+    lShoulder: [105, 0, 8], rShoulder: [105, 0, 8], lElbow: 10, rElbow: 10 },
+
+  chair: { name: "Chair", sanskrit: "Utkatasana",
+    cue: "Sit back as if into a chair, knees over toes, arms reaching up beside the ears.",
+    root: [20, 0, 0], spine: [10, 0, 0], lHip: [85, 0, 0], rHip: [85, 0, 0],
+    lKnee: 85, rKnee: 85, lAnkle: -20, rAnkle: -20,
+    lShoulder: [160, 0, 0], rShoulder: [160, 0, 0] },
+
+  tree: { name: "Tree", sanskrit: "Vrksasana",
+    cue: "Balance on one leg, press the other foot into the inner thigh, hands overhead.",
+    rHip: [25, 90, 55], rKnee: 150, rAnkle: 20,
+    lShoulder: [175, 0, 10], rShoulder: [175, 0, 10], lElbow: 15, rElbow: 15 },
+
+  warrior1: { name: "Warrior I", sanskrit: "Virabhadrasana I",
+    cue: "Front knee bent over the ankle, back leg straight, hips square, arms overhead.",
+    rHip: [70, 0, 0], rKnee: 70, lHip: [-48, 0, 0], lAnkle: -48,
+    spine: [-5, 0, 0], lShoulder: [178, 0, 0], rShoulder: [178, 0, 0] },
+
+  warrior2: { name: "Warrior II", sanskrit: "Virabhadrasana II",
+    cue: "Legs wide, front knee bent over the ankle, arms long at shoulder height, gaze over front hand.",
+    lHip: [0, 90, 72], lKnee: 72, lAnkle: 0, rHip: [0, 0, 48],
+    lShoulder: [0, 0, 90], rShoulder: [0, 0, 90], neck: [0, 80, 0] },
+
+  warrior3: { name: "Warrior III", sanskrit: "Virabhadrasana III",
+    cue: "Balance on one leg, body and back leg in one straight line parallel to the floor.",
+    root: [90, 0, 0], lHip: [90, 0, 0], lKnee: 5, rAnkle: 0,
+    lShoulder: [180, 0, 0], rShoulder: [180, 0, 0], neck: [-10, 0, 0] },
+
+  triangle: { name: "Triangle", sanskrit: "Trikonasana",
+    cue: "Legs wide and straight, tilt sideways over the front leg, one hand down, one up.",
+    lHip: [0, 0, 32], rHip: [0, 0, 32], spine: [0, 0, -55], chest: [0, 0, -20],
+    lShoulder: [0, 0, 92], rShoulder: [0, 0, 92], neck: [0, 30, -15] },
+
+  sideAngle: { name: "Extended Side Angle", sanskrit: "Utthita Parsvakonasana",
+    cue: "From Warrior II, lower forearm to front thigh and reach the top arm over the ear.",
+    lHip: [0, 90, 72], lKnee: 72, rHip: [0, 0, 48],
+    spine: [0, 0, -55], chest: [0, 0, -15],
+    lShoulder: [0, 0, 20], lElbow: 70, rShoulder: [0, 0, 160], neck: [0, 30, -10] },
+
+  halfMoon: { name: "Half Moon", sanskrit: "Ardha Chandrasana",
+    cue: "Balance on one leg, body open to the side, top leg lifted level, hand to floor or block.",
+    root: [0, 0, -100], lHip: [0, 0, 100], rHip: [0, 0, 10],
+    lShoulder: [0, 0, 100], rShoulder: [0, 0, 80], neck: [0, 20, 0] },
+
+  plank: { name: "Plank", sanskrit: "Phalakasana",
+    cue: "Hands under shoulders, body one straight line from head to heels, core engaged.",
+    root: [66, 0, 0], lShoulder: [66, 0, 0], rShoulder: [66, 0, 0],
+    lWrist: 90, rWrist: 90, lAnkle: -10, rAnkle: -10 },
+
+  chaturanga: { name: "Four-Limbed Staff (Chaturanga)", sanskrit: "Chaturanga Dandasana",
+    cue: "From plank, lower halfway with elbows bent to 90° and hugging the ribs.",
+    root: [80, 0, 0], lShoulder: [-5, 0, 0], rShoulder: [-5, 0, 0], lElbow: 95, rElbow: 95,
+    lWrist: 85, rWrist: 85, lAnkle: -10, rAnkle: -10 },
+
+  upDog: { name: "Upward-Facing Dog", sanskrit: "Urdhva Mukha Svanasana",
+    cue: "Straight arms, chest lifted and open, thighs off the floor, tops of feet down.",
+    root: [72, 0, 0], spine: [-15, 0, 0], chest: [-12, 0, 0], neck: [-20, 0, 0],
+    lShoulder: [45, 0, 0], rShoulder: [45, 0, 0], lWrist: 90, rWrist: 90,
+    lAnkle: 70, rAnkle: 70 },
+
+  downDog: { name: "Downward-Facing Dog", sanskrit: "Adho Mukha Svanasana",
+    cue: "Hips high in an upside-down V, arms and back long, heels reaching down.",
+    root: [130, 0, 0], lHip: [102, 0, 0], rHip: [102, 0, 0], lAnkle: -32, rAnkle: -32,
+    lShoulder: [172, 0, 0], rShoulder: [172, 0, 0], lWrist: -80, rWrist: -80, neck: [5, 0, 0] },
+
+  cobra: { name: "Cobra", sanskrit: "Bhujangasana",
+    cue: "Lie on your front, hands under shoulders, gently lift the chest, hips stay down.",
+    root: [90, 0, 0], spine: [-25, 0, 0], chest: [-15, 0, 0], neck: [-10, 0, 0],
+    lShoulder: [15, 0, 10], rShoulder: [15, 0, 10], lElbow: 70, rElbow: 70,
+    lWrist: 30, rWrist: 30, lAnkle: 80, rAnkle: 80 },
+
+  child: { name: "Child's Pose", sanskrit: "Balasana",
+    cue: "Kneel, sit back on your heels and fold forward, forehead down, arms long.",
+    root: [110, 0, 0], lHip: [163, 0, 6], rHip: [163, 0, 6], lKnee: 150, rKnee: 150,
+    lAnkle: 80, rAnkle: 80, neck: [10, 0, 0],
+    lShoulder: [170, 0, 0], rShoulder: [170, 0, 0] },
+
+  cat: { name: "Cat", sanskrit: "Marjaryasana",
+    cue: "On hands and knees, round the back up towards the ceiling, chin to chest.",
+    root: [90, 0, 0], spine: [18, 0, 0], chest: [14, 0, 0], neck: [35, 0, 0],
+    lHip: [90, 0, 0], rHip: [90, 0, 0], lKnee: 90, rKnee: 90, lAnkle: 90, rAnkle: 90,
+    lShoulder: [122, 0, 0], rShoulder: [122, 0, 0], lWrist: 90, rWrist: 90 },
+
+  cow: { name: "Cow", sanskrit: "Bitilasana",
+    cue: "On hands and knees, drop the belly, lift the chest and tailbone, gaze forward.",
+    root: [90, 0, 0], spine: [-15, 0, 0], chest: [-12, 0, 0], neck: [-30, 0, 0],
+    lHip: [90, 0, 0], rHip: [90, 0, 0], lKnee: 90, rKnee: 90, lAnkle: 90, rAnkle: 90,
+    lShoulder: [63, 0, 0], rShoulder: [63, 0, 0], lWrist: 90, rWrist: 90 },
+
+  camel: { name: "Camel", sanskrit: "Ustrasana",
+    cue: "Kneel with hips over knees, lift the chest and arch back, hands reaching to heels.",
+    root: [-15, 0, 0], lHip: [-15, 0, 0], rHip: [-15, 0, 0], lKnee: 90, rKnee: 90,
+    lAnkle: 90, rAnkle: 90, spine: [-35, 0, 0], chest: [-30, 0, 0], neck: [-30, 0, 0],
+    lShoulder: [-85, 0, 8], rShoulder: [-85, 0, 8] },
+
+  pigeon: { name: "Pigeon", sanskrit: "Eka Pada Rajakapotasana",
+    cue: "Front shin across the mat, back leg long behind, hips square, chest tall.",
+    root: [10, 0, 0], lHip: [45, 180, 75], lKnee: 110, rHip: [-80, 0, 0], rAnkle: 90,
+    lShoulder: [10, 0, 12], rShoulder: [10, 0, 12], lWrist: 80, rWrist: 80 },
+
+  easy: { name: "Easy Seat / Lotus", sanskrit: "Sukhasana / Padmasana",
+    cue: "Sit cross-legged with a tall spine, shoulders relaxed, hands resting on knees.",
+    lHip: [50, 180, 72], rHip: [50, 180, 72], lKnee: 135, rKnee: 135,
+    lShoulder: [30, 0, 15], rShoulder: [30, 0, 15], lElbow: 55, rElbow: 55 },
+
+  seatedFold: { name: "Seated Forward Bend", sanskrit: "Paschimottanasana",
+    cue: "Sit with legs straight out, hinge from the hips and reach for your feet.",
+    root: [50, 0, 0], spine: [15, 0, 0], chest: [10, 0, 0], neck: [15, 0, 0],
+    lHip: [140, 0, 0], rHip: [140, 0, 0],
+    lShoulder: [168, 0, 0], rShoulder: [168, 0, 0] },
+
+  boat: { name: "Boat", sanskrit: "Navasana",
+    cue: "Balance on your sit bones, legs lifted at 45°, chest up, arms reaching forward.",
+    root: [-30, 0, 0], lHip: [105, 0, 0], rHip: [95, 0, 0], lAnkle: 25, rAnkle: 25,
+    lShoulder: [60, 0, 0], rShoulder: [60, 0, 0], neck: [10, 0, 0] },
+
+  bridge: { name: "Bridge", sanskrit: "Setu Bandha Sarvangasana",
+    cue: "On your back, feet flat and hip-width, press down and lift the hips high.",
+    root: [-115, 0, 0], lHip: [-20, 0, 0], rHip: [-20, 0, 0], lKnee: 110, rKnee: 110,
+    lAnkle: -15, rAnkle: -15, neck: [60, 0, 0],
+    lShoulder: [-25, 0, 5], rShoulder: [-25, 0, 5] },
+
+  crow: { name: "Crow", sanskrit: "Bakasana",
+    cue: "Hands planted, knees on the backs of the upper arms, lean forward and lift the feet.",
+    root: [70, 0, 0], spine: [15, 0, 0], lHip: [150, 0, 24], rHip: [150, 0, 24], lKnee: 160, rKnee: 160,
+    lAnkle: 40, rAnkle: 40, lShoulder: [85, 0, 0], rShoulder: [85, 0, 0],
+    lElbow: 45, rElbow: 45, lWrist: 70, rWrist: 70, neck: [-20, 0, 0] },
+
+  corpse: { name: "Corpse", sanskrit: "Savasana",
+    cue: "Lie flat on your back, arms relaxed by your sides, palms up, let everything go.",
+    root: [-90, 0, 0], lShoulder: [0, 0, 20], rShoulder: [0, 0, 20],
+    lHip: [0, 0, 8], rHip: [0, 0, 8], lAnkle: 20, rAnkle: 20 },
+};
+
+/* ---------------- figure ---------------- */
+const D = Math.PI / 180;
+const JOINTS = ["root","spine","chest","neck","lShoulder","rShoulder","lElbow","rElbow",
+  "lWrist","rWrist","lHip","rHip","lKnee","rKnee","lAnkle","rAnkle"];
+const SCALAR = new Set(["lElbow","rElbow","lWrist","rWrist","lKnee","rKnee","lAnkle","rAnkle"]);
+function full(p) {   // fill defaults so every joint has a value
+  const o = {};
+  for (const j of JOINTS) o[j] = SCALAR.has(j) ? (p[j] ?? 0) : [...(p[j] ?? [0,0,0])];
+  return o;
+}
+
+const scene = new THREE.Scene();
+const stage = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+stage.appendChild(renderer.domElement);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
+camera.position.set(2.6, 1.6, 3.4);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.6, 0);
+controls.enableDamping = true; controls.enablePan = false;
+controls.minDistance = 1.5; controls.maxDistance = 9;
+controls.maxPolarAngle = Math.PI * 0.95;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x303038, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+sun.position.set(2, 5, 3); sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -2.5, right: 2.5, top: 2.5, bottom: -2.5 });
+scene.add(sun);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(3, 48),
+  new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 1 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const mat = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.01, 1.85),
+  new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.9 }));
+mat.position.y = 0.005; mat.receiveShadow = true; scene.add(mat);
+
+const skin = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.55 });
+const jointMat = new THREE.MeshStandardMaterial({ color: 0x8b5cf6, roughness: 0.4 });
+const leftMat = new THREE.MeshStandardMaterial({ color: 0xa1a1aa, roughness: 0.55 }); // left side slightly darker
+function seg(parent, len, r, m = skin, dir = -1) {
+  const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(len - 2 * r, 0.001), 6, 12), m);
+  mesh.position.y = dir * len / 2; mesh.castShadow = true; parent.add(mesh); return mesh;
+}
+function ball(parent, r, y = 0) {
+  const b = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), jointMat);
+  b.position.y = y; b.castShadow = true; parent.add(b); return b;
+}
+function group(parent, x, y, z, order = "XYZ") {
+  const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.order = order; parent.add(g); return g;
+}
+
+const figure = new THREE.Group(); scene.add(figure);
+const J = {};
+J.root = group(figure, 0, 0.97, 0);
+const pelvis = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.12, 6, 12), skin);
+pelvis.rotation.z = Math.PI / 2; pelvis.castShadow = true; J.root.add(pelvis);
+J.spine = group(J.root, 0, 0.05, 0); seg(J.spine, 0.26, 0.09, skin, 1);
+J.chest = group(J.spine, 0, 0.26, 0); ball(J.spine, 0.075, 0.26);
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.1, 6, 12), skin);
+torso.scale.set(1.25, 1, 0.8); torso.position.y = 0.15; torso.castShadow = true; J.chest.add(torso);
+J.neck = group(J.chest, 0, 0.32, 0); seg(J.neck, 0.08, 0.04, skin, 1);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 24, 16), skin);
+head.scale.set(0.9, 1.1, 1); head.position.set(0, 0.18, 0.01); head.castShadow = true; J.neck.add(head);
+const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.05, 8), jointMat); // shows which way the face points
+nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.17, 0.11); J.neck.add(nose);
+
+for (const s of ["l", "r"]) {
+  const sx = s === "l" ? 1 : -1, m = s === "l" ? leftMat : skin;
+  const sh = J[s + "Shoulder"] = group(J.chest, sx * 0.2, 0.27, 0); ball(sh, 0.055);
+  seg(sh, 0.3, 0.045, m);
+  const el = J[s + "Elbow"] = group(sh, 0, -0.3, 0); ball(el, 0.045); seg(el, 0.27, 0.04, m);
+  const wr = J[s + "Wrist"] = group(el, 0, -0.27, 0); ball(wr, 0.035);
+  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.03), m);
+  hand.position.y = -0.09; hand.castShadow = true; wr.add(hand);
+  const hp = J[s + "Hip"] = group(J.root, sx * 0.1, -0.03, 0, "ZXY"); ball(hp, 0.07);
+  seg(hp, 0.45, 0.07, m);
+  const kn = J[s + "Knee"] = group(hp, 0, -0.45, 0); ball(kn, 0.06); seg(kn, 0.43, 0.055, m);
+  const an = J[s + "Ankle"] = group(kn, 0, -0.43, 0); ball(an, 0.045);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.24), m);
+  foot.position.set(0, -0.04, 0.07); foot.castShadow = true; an.add(foot);
+}
+
+// Apply a full pose object (angles in degrees) to the rig.
+function apply(p) {
+  const set = (g, [x, y, z]) => g.rotation.set(x * D, y * D, z * D);
+  set(J.root, [p.root[0], p.root[1], -p.root[2]]);
+  set(J.spine, p.spine.map((v, i) => i === 2 ? -v : v));
+  set(J.chest, p.chest.map((v, i) => i === 2 ? -v : v));
+  set(J.neck, p.neck);
+  for (const s of ["l", "r"]) {
+    const m = s === "l" ? 1 : -1;         // mirror side/twist for the right side
+    const sh = p[s + "Shoulder"], hp = p[s + "Hip"];
+    J[s + "Shoulder"].rotation.set(-sh[0] * D, m * sh[1] * D, m * sh[2] * D);
+    J[s + "Elbow"].rotation.set(-p[s + "Elbow"] * D, 0, 0);
+    J[s + "Wrist"].rotation.set(-p[s + "Wrist"] * D, 0, 0);
+    J[s + "Hip"].rotation.set(-hp[0] * D, m * hp[1] * D, m * hp[2] * D);
+    J[s + "Knee"].rotation.set(p[s + "Knee"] * D, 0, 0);
+    J[s + "Ankle"].rotation.set(p[s + "Ankle"] * D, 0, 0);
+  }
+  // Ground the figure: lowest point on the floor, centred over the mat.
+  J.root.position.set(0, 0.97, 0);
+  figure.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(figure, true);
+  J.root.position.x -= (box.min.x + box.max.x) / 2;
+  J.root.position.z -= (box.min.z + box.max.z) / 2;
+  J.root.position.y -= box.min.y - 0.01;
+  return box;
+}
+
+/* ---------------- animation between poses ---------------- */
+let current = full(POSES.mountain), from = current, to = current, t0 = 0;
+const DUR = 900;
+const ease = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const lerp = (a, b, k) => Array.isArray(a) ? a.map((v, i) => v + (b[i] - v) * k) : a + (b - a) * k;
+function goTo(key) {
+  const p = POSES[key];
+  from = current; to = full(p); t0 = performance.now();
+  document.getElementById("sanskrit").textContent = p.sanskrit;
+  document.getElementById("cue").textContent = p.cue;
+  if (history.replaceState) history.replaceState(null, "", "#" + key);
+}
+
+const sel = document.getElementById("pose");
+for (const [k, p] of Object.entries(POSES)) sel.add(new Option(`${p.name} — ${p.sanskrit}`, k));
+sel.onchange = () => goTo(sel.value);
+const keys = Object.keys(POSES);
+const step = (d) => { sel.value = keys[(keys.indexOf(sel.value) + d + keys.length) % keys.length]; goTo(sel.value); };
+document.getElementById("prev").onclick = () => step(-1);
+document.getElementById("next").onclick = () => step(1);
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h;
+  // keep the whole figure in view on narrow phones
+  camera.position.setLength(Math.max(3.6, 4.4 / Math.min(1, camera.aspect * 1.4)));
+  camera.updateProjectionMatrix();
+}
+camera.position.normalize();
+addEventListener("resize", resize);
+
+function frame(now) {
+  const k = Math.min(1, (now - t0) / DUR);
+  if (k < 1 || current !== to) {
+    const e = ease(k);
+    const p = {};
+    for (const j of JOINTS) p[j] = lerp(from[j], to[j], e);
+    current = k >= 1 ? to : p;
+    const box = apply(p);
+    controls.target.y += (((box.max.y - box.min.y) / 2) - controls.target.y) * 0.15;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+const start = location.hash.slice(1);
+sel.value = POSES[start] ? start : "mountain";
+resize(); apply(current); goTo(sel.value);
+if (new URLSearchParams(location.search).has("instant")) t0 = -1e9; // for screenshots
+requestAnimationFrame(frame);
+window.__yoga = { POSES, camera, controls, goTo: (k) => { sel.value = k; goTo(k); t0 = -1e9; } };
+</script>
+</body>
+</html>

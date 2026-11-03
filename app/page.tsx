@@ -96,6 +96,27 @@ export default function Home() {
               </ul>
             </a>
             <a
+              href="/yoga"
+              className="group mt-4 block rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition-colors hover:border-zinc-600 hover:bg-zinc-900"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-lg">Yoga Poses</p>
+                  <p className="text-zinc-400 mt-1">Pick a pose and drag the 3D figure to see it from any angle.</p>
+                </div>
+                <span
+                  aria-hidden="true"
+                  className="text-zinc-400 text-xl transition-colors group-hover:text-white"
+                >
+                  →
+                </span>
+              </div>
+              <ul className="mt-5 flex flex-wrap gap-2 text-xs tracking-widest text-zinc-400">
+                <li className="rounded-full border border-zinc-800 px-3 py-1">3D</li>
+                <li className="rounded-full border border-zinc-800 px-3 py-1">YOGA</li>
+              </ul>
+            </a>
+            <a
               href="/taekwondo"
               className="group mt-4 block rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 transition-colors hover:border-zinc-600 hover:bg-zinc-900"
             >
