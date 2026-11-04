@@ -13,9 +13,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Doctor Master UK",
+  title: "Sharon Epic Armando — Artist & Developer",
   description:
-    "Web apps, art and experiments by Doctor Master, including a Chinese ↔ English translator and Quantum Spatial.",
+    "Artist — singer, comic artist, designer, performer. Developer — builds and deploys the web projects, AI tools, and quantum visualizations that come out of that work.",
+  openGraph: {
+    title: "Sharon Epic Armando — Artist & Developer",
+    description: "Artist — singer, comic artist, designer, performer. Developer — builds and deploys the web projects, AI tools, and quantum visualizations that come out of that work.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Sharon Epic Armando — Artist & Developer",
+    description: "Artist — singer, comic artist, designer, performer. Developer — builds and deploys the web projects, AI tools, and quantum visualizations that come out of that work.",
+  },
 };
 
 export default function RootLayout({
